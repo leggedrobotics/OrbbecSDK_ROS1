@@ -1987,7 +1987,9 @@ void OBCameraNode::onNewFrameCallback(std::shared_ptr<ob::Frame> frame,
     OBCameraIntrinsic intrinsic;
     OBCameraDistortion distortion;
     CHECK_NOTNULL(device_info_.get());
-    if (isGemini335PID(device_info_->pid())) {
+    const bool is_dual_color_frame =
+        frame->type() == OB_FRAME_COLOR_LEFT || frame->type() == OB_FRAME_COLOR_RIGHT;
+    if (isGemini335PID(device_info_->pid()) || is_dual_color_frame) {
       auto stream_profile = frame->getStreamProfile();
       CHECK_NOTNULL(stream_profile.get());
       auto video_stream_profile = stream_profile->as<ob::VideoStreamProfile>();
@@ -2024,6 +2026,18 @@ void OBCameraNode::onNewFrameCallback(std::shared_ptr<ob::Frame> frame,
       double fy = camera_info.K.at(4);
       camera_info.P.at(3) = fx * ex.trans[0] / 1000.0 + 0.0;
       camera_info.P.at(7) = fy * ex.trans[1] / 1000.0 + 0.0;
+    } else if (frame->type() == OB_FRAME_COLOR_RIGHT && enable_stream_[COLOR_LEFT]) {
+      auto left_video_profile = stream_profile_[COLOR_LEFT]->as<ob::VideoStreamProfile>();
+      CHECK_NOTNULL(left_video_profile.get());
+      auto stream_profile = frame->getStreamProfile();
+      CHECK_NOTNULL(stream_profile.get());
+      auto video_stream_profile = stream_profile->as<ob::VideoStreamProfile>();
+      CHECK_NOTNULL(video_stream_profile.get());
+      auto ex = video_stream_profile->getExtrinsicTo(left_video_profile);
+      double fx = camera_info.K.at(0);
+      double fy = camera_info.K.at(4);
+      camera_info.P.at(3) = fx * ex.trans[0] / 1000.0;
+      camera_info.P.at(7) = fy * ex.trans[1] / 1000.0;
     }
     camera_info_publisher.publish(camera_info);
     publishMetadata(frame, stream_index, camera_info.header);
